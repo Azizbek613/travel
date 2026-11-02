@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export interface Car {
   id: string;
   name: string;
@@ -417,6 +419,27 @@ export const getCars = (): Car[] => {
   }
 };
 
+export const syncCarsFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase.from('cars').select('data');
+    if (error) {
+      console.warn('Failed to fetch cars from Supabase', error);
+      return;
+    }
+    if (data && Array.isArray(data) && data.length > 0) {
+      const remoteCars = data.map((r: any) => r.data as Car);
+      const raw = JSON.stringify(remoteCars);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(CARS_STORAGE_KEY, raw);
+      }
+      carsCache = { raw, cars: remoteCars };
+      notifyStoreChange();
+    }
+  } catch (e) {
+    console.warn('Supabase sync error', e);
+  }
+};
+
 export const saveCars = (cars: Car[]) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(cars));
@@ -427,19 +450,29 @@ export const addCar = (car: Car) => {
   const cars = getCars();
   const updated = [car, ...cars];
   saveCars(updated);
+  supabase.from('cars').upsert({ id: car.id, data: car }).catch((err) => console.error(err));
 };
 
 export const updateCar = (car: Car) => {
   const cars = getCars();
   const updated = cars.map((c) => (c.id === car.id ? car : c));
   saveCars(updated);
+  supabase.from('cars').upsert({ id: car.id, data: car }).catch((err) => console.error(err));
 };
 
 export const deleteCar = (carId: string) => {
   const cars = getCars();
   const updated = cars.filter((c) => c.id !== carId);
   saveCars(updated);
+  supabase.from('cars').delete().eq('id', carId).catch((err) => console.error(err));
 };
+
+if (typeof window !== 'undefined') {
+  syncCarsFromSupabase();
+  window.addEventListener('focus', () => {
+    syncCarsFromSupabase();
+  });
+}
 
 /**
  * Booking helpers. Bookings themselves live on the server (see src/lib/api.ts)
