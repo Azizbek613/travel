@@ -22,7 +22,6 @@ import {
   ApiError, adminLogin, adminFetchBookings, adminSetBookingStatus, adminDeleteBooking,
   adminTestTelegram, getAdminToken, setAdminToken, clearAdminToken
 } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
 
 export default function AdminPage() {
   const [lang, setLang] = useState<Language>(() => {
@@ -126,16 +125,6 @@ export default function AdminPage() {
         handleLogout();
       } else {
         try {
-          const { data: supaBookings } = await supabase.from('bookings').select('data').order('created_at', { ascending: false });
-          if (supaBookings && Array.isArray(supaBookings) && supaBookings.length > 0) {
-            const list = supaBookings.map((b: any) => b.data as Booking);
-            setBookings(list);
-            setDataError('');
-            return;
-          }
-        } catch {}
-
-        try {
           const localBookings = JSON.parse(localStorage.getItem('travel_caravan_admin_bookings') || '[]');
           setBookings(Array.isArray(localBookings) ? localBookings : []);
         } catch {
@@ -161,13 +150,6 @@ export default function AdminPage() {
       setSelectedBookingForDetails((cur) => (cur && cur.id === id ? updated : cur));
     } catch (e) {
       if (getAdminToken() === 'tc_admin_token_travelcaravan') {
-        supabase.from('bookings').select('data').eq('id', id).then(({ data: rows }) => {
-          if (rows && rows[0]) {
-            const updatedB = { ...(rows[0].data as Booking), status };
-            supabase.from('bookings').update({ data: updatedB }).eq('id', id);
-          }
-        }).catch(() => {});
-
         setBookings((prev) => {
           const next = prev.map((b) => (b.id === id ? { ...b, status } : b));
           try { localStorage.setItem('travel_caravan_admin_bookings', JSON.stringify(next)); } catch {}
@@ -190,7 +172,6 @@ export default function AdminPage() {
       setBookings((prev) => prev.filter((b) => b.id !== id));
     } catch (e) {
       if (getAdminToken() === 'tc_admin_token_travelcaravan') {
-        supabase.from('bookings').delete().eq('id', id).catch(() => {});
         setBookings((prev) => {
           const next = prev.filter((b) => b.id !== id);
           try { localStorage.setItem('travel_caravan_admin_bookings', JSON.stringify(next)); } catch {}

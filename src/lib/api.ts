@@ -1,5 +1,4 @@
 import type { Booking, BusyRange } from '@/lib/store';
-import { supabase } from './supabase';
 
 export class ApiError extends Error {
   status: number;
@@ -81,10 +80,9 @@ export const submitBooking = async (input: NewBookingInput): Promise<Booking> =>
       createdAt: new Date().toISOString(),
     };
     try {
-      await supabase.from('bookings').insert({ id: bookingId, data: fallbackBooking });
-    } catch (e) {
-      console.warn('Failed to insert booking into Supabase', e);
-    }
+      const existing = JSON.parse(localStorage.getItem('travel_caravan_admin_bookings') || '[]');
+      localStorage.setItem('travel_caravan_admin_bookings', JSON.stringify([fallbackBooking, ...existing]));
+    } catch {}
     return fallbackBooking;
   }
 };
