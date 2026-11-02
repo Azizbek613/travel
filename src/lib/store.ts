@@ -237,55 +237,6 @@ export const initialCars: Car[] = [
     }
   },
   {
-    id: 'car-7',
-    name: 'Toyota Camry 75',
-    type: 'business',
-    price: 70,
-    images: [
-      'https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80'
-    ],
-    seats: 5,
-    transmission: 'Automatic',
-    fuel: 'Petrol',
-    year: 2024,
-    rating: 4.9,
-    status: 'available',
-    features: {
-      ru: ['Просторный салон', 'Акустика JBL', 'Обогрев задних сидений', 'Шумоизоляция', 'Комплекс безопасности'],
-      en: ['Spacious Cabin', 'JBL Sound System', 'Heated Seats', 'Superb Soundproofing', 'Full Safety Package']
-    },
-    description: {
-      ru: 'Легендарный японский комфорт и надежность для бизнес-поездок.',
-      en: 'Legendary Japanese comfort, smoothness, and prestige for executive travel.'
-    }
-  },
-  {
-    id: 'car-8',
-    name: 'Chevrolet Tracker 2',
-    type: 'comfort',
-    price: 45,
-    images: [
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=1000&q=80'
-    ],
-    seats: 5,
-    transmission: 'Automatic',
-    fuel: 'Petrol',
-    year: 2024,
-    rating: 4.8,
-    status: 'available',
-    features: {
-      ru: ['Компактный кроссовер', 'Высокий клиренс', 'Сенсорный экран', 'Экономичный расход', 'Камера и датчики'],
-      en: ['Compact Crossover', 'High Clearance', 'Touchscreen Infotainment', 'High Fuel Efficiency', 'Sensors & Camera']
-    },
-    description: {
-      ru: 'Компактный и маневренный кроссовер для города и предгорий.',
-      en: 'Agile and modern crossover suitable for city exploration and mountain gateways.'
-    }
-  },
-  {
     id: 'car-9',
     name: 'Asiastar Eurise VIP Coach',
     type: 'bus',
@@ -439,7 +390,7 @@ export const initialTours: Tour[] = [
 ];
 
 // LocalStorage Keys
-const CARS_STORAGE_KEY = 'travel_caravan_cars_v1';
+const CARS_STORAGE_KEY = 'travel_caravan_cars_v2';
 const TOURS_STORAGE_KEY = 'travel_caravan_tours_v1';
 
 // Safe LocalStorage helpers
