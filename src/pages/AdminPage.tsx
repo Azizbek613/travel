@@ -15,8 +15,9 @@ import { Link } from 'react-router-dom';
 import { Language, useTranslation } from '@/lib/i18n';
 import { 
   Car as CarType, Booking, Tour, getCars, saveCars, getTours, saveTours,
-  addCar, updateCar, deleteCar, getCustomersSummary, CustomerSummary, 
-  subscribeStoreChange
+  addCar, updateCar, deleteCar, addTour, updateTour, deleteTour,
+  loadCars, loadTours,
+  getCustomersSummary, CustomerSummary, subscribeStoreChange
 } from '@/lib/store';
 import {
   ApiError, adminLogin, adminFetchBookings, adminSetBookingStatus, adminDeleteBooking,
@@ -135,7 +136,10 @@ export default function AdminPage() {
     }
   }, [handleLogout]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
+    try {
+      await Promise.all([loadCars(), loadTours()]);
+    } catch {}
     setCars(getCars());
     setTours(getTours());
     loadBookings();
@@ -356,56 +360,68 @@ export default function AdminPage() {
     setVehicleModalOpen(true);
   };
 
-  const handleSaveVehicle = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsedImages = vehicleFormData.imagesText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [isSavingTour, setIsSavingTour] = useState(false);
 
-    if (editingVehicle) {
-      const updated: CarType = {
-        ...editingVehicle,
-        name: vehicleFormData.name,
-        type: vehicleFormData.type,
-        price: Number(vehicleFormData.price),
-        seats: Number(vehicleFormData.seats),
-        transmission: vehicleFormData.transmission,
-        fuel: vehicleFormData.fuel,
-        year: Number(vehicleFormData.year),
-        images: parsedImages.length > 0 ? parsedImages : editingVehicle.images,
-        status: vehicleFormData.status,
-        description: {
-          ru: vehicleFormData.descRu,
-          en: vehicleFormData.descEn,
-        },
-      };
-      updateCar(updated);
-    } else {
-      const newCar: CarType = {
-        id: `car-${Date.now()}`,
-        name: vehicleFormData.name,
-        type: vehicleFormData.type,
-        price: Number(vehicleFormData.price),
-        seats: Number(vehicleFormData.seats),
-        transmission: vehicleFormData.transmission,
-        fuel: vehicleFormData.fuel,
-        year: Number(vehicleFormData.year),
-        rating: 5.0,
-        images: parsedImages.length > 0 ? parsedImages : ['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80'],
-        status: vehicleFormData.status,
-        features: {
-          ru: ['Кондиционер', 'Подушки безопасности', 'ABS', 'Bluetooth аудио'],
-          en: ['Air Conditioning', 'Airbags', 'ABS', 'Bluetooth audio'],
-        },
-        description: {
-          ru: vehicleFormData.descRu,
-          en: vehicleFormData.descEn,
-        },
-      };
-      addCar(newCar);
+  const handleSaveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingVehicle(true);
+    try {
+      const parsedImages = vehicleFormData.imagesText
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (editingVehicle) {
+        const updated: CarType = {
+          ...editingVehicle,
+          name: vehicleFormData.name,
+          type: vehicleFormData.type,
+          price: Number(vehicleFormData.price),
+          seats: Number(vehicleFormData.seats),
+          transmission: vehicleFormData.transmission,
+          fuel: vehicleFormData.fuel,
+          year: Number(vehicleFormData.year),
+          images: parsedImages.length > 0 ? parsedImages : editingVehicle.images,
+          status: vehicleFormData.status,
+          description: {
+            ru: vehicleFormData.descRu,
+            en: vehicleFormData.descEn,
+          },
+        };
+        await updateCar(updated);
+        setCars(getCars());
+      } else {
+        const newCar: CarType = {
+          id: `car-${Date.now()}`,
+          name: vehicleFormData.name,
+          type: vehicleFormData.type,
+          price: Number(vehicleFormData.price),
+          seats: Number(vehicleFormData.seats),
+          transmission: vehicleFormData.transmission,
+          fuel: vehicleFormData.fuel,
+          year: Number(vehicleFormData.year),
+          rating: 5.0,
+          images: parsedImages.length > 0 ? parsedImages : ['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80'],
+          status: vehicleFormData.status,
+          features: {
+            ru: ['Кондиционер', 'Подушки безопасности', 'ABS', 'Bluetooth аудио'],
+            en: ['Air Conditioning', 'Airbags', 'ABS', 'Bluetooth audio'],
+          },
+          description: {
+            ru: vehicleFormData.descRu,
+            en: vehicleFormData.descEn,
+          },
+        };
+        await addCar(newCar);
+        setCars(getCars());
+      }
+      setVehicleModalOpen(false);
+    } catch (err: any) {
+      window.alert('Failed to save vehicle to database: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsSavingVehicle(false);
     }
-    setVehicleModalOpen(false);
   };
 
   const handleOpenTourModal = (tourToEdit?: Tour) => {
@@ -431,28 +447,37 @@ export default function AdminPage() {
     setTourModalOpen(true);
   };
 
-  const handleSaveTour = (e: React.FormEvent) => {
+  const handleSaveTour = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tour: Tour = {
-      id: editingTour?.id || `tour-${Date.now()}`,
-      city: tourFormData.city.trim(),
-      image: tourFormData.image.trim(),
-      price: Number(tourFormData.price),
-      transport: tourFormData.transport.trim(),
-      title: { en: tourFormData.titleEn.trim(), ru: tourFormData.titleRu.trim() },
-      description: { en: tourFormData.descriptionEn.trim(), ru: tourFormData.descriptionRu.trim() },
-      duration: { en: tourFormData.durationEn.trim(), ru: tourFormData.durationRu.trim() },
-      highlights: {
-        en: tourFormData.highlightsEn.split('\n').map((item) => item.trim()).filter(Boolean),
-        ru: tourFormData.highlightsRu.split('\n').map((item) => item.trim()).filter(Boolean),
-      },
-    };
-    const nextTours = editingTour
-      ? tours.map((item) => item.id === editingTour.id ? tour : item)
-      : [tour, ...tours];
-    saveTours(nextTours);
-    setTours(nextTours);
-    setTourModalOpen(false);
+    setIsSavingTour(true);
+    try {
+      const tour: Tour = {
+        id: editingTour?.id || `tour-${Date.now()}`,
+        city: tourFormData.city.trim(),
+        image: tourFormData.image.trim(),
+        price: Number(tourFormData.price),
+        transport: tourFormData.transport.trim(),
+        title: { en: tourFormData.titleEn.trim(), ru: tourFormData.titleRu.trim() },
+        description: { en: tourFormData.descriptionEn.trim(), ru: tourFormData.descriptionRu.trim() },
+        duration: { en: tourFormData.durationEn.trim(), ru: tourFormData.durationRu.trim() },
+        highlights: {
+          en: tourFormData.highlightsEn.split('\n').map((item) => item.trim()).filter(Boolean),
+          ru: tourFormData.highlightsRu.split('\n').map((item) => item.trim()).filter(Boolean),
+        },
+      };
+
+      if (editingTour) {
+        await updateTour(tour);
+      } else {
+        await addTour(tour);
+      }
+      setTours(getTours());
+      setTourModalOpen(false);
+    } catch (err: any) {
+      window.alert('Failed to save tour to database: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsSavingTour(false);
+    }
   };
 
   // If not authenticated, render Login Screen with Demo Credentials Button
@@ -1245,9 +1270,14 @@ export default function AdminPage() {
                       </button>
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (window.confirm(`Delete ${car.name}?`)) {
-                            deleteCar(car.id);
+                            try {
+                              await deleteCar(car.id);
+                              setCars(getCars());
+                            } catch (err: any) {
+                              window.alert('Failed to delete car from database: ' + (err.message || 'Unknown error'));
+                            }
                           }
                         }}
                         className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
@@ -1291,7 +1321,16 @@ export default function AdminPage() {
                     </div>
                     <div className="p-4 pt-0 flex items-center gap-2">
                       <button onClick={() => handleOpenTourModal(tour)} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-gray-200 flex items-center justify-center gap-1"><Edit className="w-3.5 h-3.5" /> Edit</button>
-                      <button onClick={() => { if (window.confirm(`Delete the ${tour.city} tour?`)) { const nextTours = tours.filter((item) => item.id !== tour.id); saveTours(nextTours); setTours(nextTours); } }} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400" title="Delete tour"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={async () => {
+                        if (window.confirm(`Delete the ${tour.city} tour?`)) {
+                          try {
+                            await deleteTour(tour.id);
+                            setTours(getTours());
+                          } catch (err: any) {
+                            window.alert('Failed to delete tour from database: ' + (err.message || 'Unknown error'));
+                          }
+                        }
+                      }} className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400" title="Delete tour"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 ))}

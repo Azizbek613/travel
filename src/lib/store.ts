@@ -389,56 +389,167 @@ export const initialTours: Tour[] = [
   }
 ];
 
-// LocalStorage Keys
-const CARS_STORAGE_KEY = 'travel_caravan_cars_v3';
-const TOURS_STORAGE_KEY = 'travel_caravan_tours_v1';
+// LocalStorage Keys for temporary offline fallback
+const CARS_STORAGE_KEY = 'travel_caravan_cars_v4';
+const TOURS_STORAGE_KEY = 'travel_caravan_tours_v4';
 
-// Safe LocalStorage helpers
-// Parsed cars are cached per raw localStorage value so repeated calls return the
-// SAME array/objects until something really changes (stable identities keep
-// React effects from re-running on every render).
-let carsCache: { raw: string; cars: Car[] } | null = null;
+import {
+  apiFetchCars,
+  apiCreateCar,
+  apiUpdateCar,
+  apiDeleteCar,
+  apiFetchTours,
+  apiCreateTour,
+  apiUpdateTour,
+  apiDeleteTour,
+} from './api';
 
-export const getCars = (): Car[] => {
-  if (typeof window === 'undefined') return initialCars;
+// In-memory state synchronized with the central database
+let currentCars: Car[] = initialCars;
+let currentTours: Tour[] = initialTours;
+
+// Initialize from local cache if available for instant paint
+if (typeof window !== 'undefined') {
   try {
-    let raw = window.localStorage.getItem(CARS_STORAGE_KEY);
-    if (!raw) {
-      raw = JSON.stringify(initialCars);
-      window.localStorage.setItem(CARS_STORAGE_KEY, raw);
+    const cachedCars = window.localStorage.getItem(CARS_STORAGE_KEY);
+    if (cachedCars) {
+      const parsed = JSON.parse(cachedCars);
+      if (Array.isArray(parsed) && parsed.length > 0) currentCars = parsed;
     }
-    if (carsCache && carsCache.raw === raw) return carsCache.cars;
-    const cars = JSON.parse(raw) as Car[];
-    carsCache = { raw, cars };
-    return cars;
+    const cachedTours = window.localStorage.getItem(TOURS_STORAGE_KEY);
+    if (cachedTours) {
+      const parsed = JSON.parse(cachedTours);
+      if (Array.isArray(parsed) && parsed.length > 0) currentTours = parsed;
+    }
+  } catch {}
+}
+
+export const loadCars = async (): Promise<Car[]> => {
+  try {
+    const cars = await apiFetchCars();
+    if (Array.isArray(cars) && cars.length > 0) {
+      currentCars = cars;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(cars));
+      }
+      notifyStoreChange();
+      return cars;
+    }
   } catch (err) {
-    console.error('Failed to load cars from localStorage', err);
-    return initialCars;
+    console.warn('Could not fetch cars from database, using cached/fallback cars:', err);
   }
+  return currentCars;
 };
 
+export const loadTours = async (): Promise<Tour[]> => {
+  try {
+    const tours = await apiFetchTours();
+    if (Array.isArray(tours) && tours.length > 0) {
+      currentTours = tours;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(tours));
+      }
+      notifyStoreChange();
+      return tours;
+    }
+  } catch (err) {
+    console.warn('Could not fetch tours from database, using cached/fallback tours:', err);
+  }
+  return currentTours;
+};
+
+// Start background database sync immediately when app starts
+if (typeof window !== 'undefined') {
+  loadCars();
+  loadTours();
+  window.addEventListener('focus', () => {
+    loadCars();
+    loadTours();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      loadCars();
+      loadTours();
+    }
+  });
+}
+
+export const getCars = (): Car[] => currentCars;
+
 export const saveCars = (cars: Car[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(cars));
+  currentCars = cars;
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(cars));
+  }
   notifyStoreChange();
 };
 
-export const addCar = (car: Car) => {
-  const cars = getCars();
-  const updated = [car, ...cars];
-  saveCars(updated);
+export const addCar = async (car: Car): Promise<Car> => {
+  const saved = await apiCreateCar(car);
+  currentCars = [saved, ...currentCars.filter((c) => c.id !== saved.id)];
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(currentCars));
+  }
+  notifyStoreChange();
+  return saved;
 };
 
-export const updateCar = (car: Car) => {
-  const cars = getCars();
-  const updated = cars.map((c) => (c.id === car.id ? car : c));
-  saveCars(updated);
+export const updateCar = async (car: Car): Promise<Car> => {
+  const saved = await apiUpdateCar(car);
+  currentCars = currentCars.map((c) => (c.id === saved.id ? saved : c));
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(currentCars));
+  }
+  notifyStoreChange();
+  return saved;
 };
 
-export const deleteCar = (carId: string) => {
-  const cars = getCars();
-  const updated = cars.filter((c) => c.id !== carId);
-  saveCars(updated);
+export const deleteCar = async (carId: string): Promise<void> => {
+  await apiDeleteCar(carId);
+  currentCars = currentCars.filter((c) => c.id !== carId);
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(CARS_STORAGE_KEY, JSON.stringify(currentCars));
+  }
+  notifyStoreChange();
+};
+
+export const getTours = (): Tour[] => currentTours;
+
+export const saveTours = (tours: Tour[]) => {
+  currentTours = tours;
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(tours));
+  }
+  notifyStoreChange();
+};
+
+export const addTour = async (tour: Tour): Promise<Tour> => {
+  const saved = await apiCreateTour(tour);
+  currentTours = [saved, ...currentTours.filter((t) => t.id !== saved.id)];
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(currentTours));
+  }
+  notifyStoreChange();
+  return saved;
+};
+
+export const updateTour = async (tour: Tour): Promise<Tour> => {
+  const saved = await apiUpdateTour(tour);
+  currentTours = currentTours.map((t) => (t.id === saved.id ? saved : t));
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(currentTours));
+  }
+  notifyStoreChange();
+  return saved;
+};
+
+export const deleteTour = async (tourId: string): Promise<void> => {
+  await apiDeleteTour(tourId);
+  currentTours = currentTours.filter((t) => t.id !== tourId);
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(currentTours));
+  }
+  notifyStoreChange();
 };
 
 /**
@@ -484,34 +595,6 @@ export const localDateString = (offsetDays = 0): string => {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
-};
-
-export const saveTours = (tours: Tour[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(tours));
-  notifyStoreChange();
-};
-
-export const addTour = (tour: Tour) => saveTours([tour, ...getTours()]);
-
-export const updateTour = (tour: Tour) =>
-  saveTours(getTours().map((item) => (item.id === tour.id ? tour : item)));
-
-export const deleteTour = (tourId: string) =>
-  saveTours(getTours().filter((item) => item.id !== tourId));
-
-export const getTours = (): Tour[] => {
-  if (typeof window === 'undefined') return initialTours;
-  try {
-    const raw = window.localStorage.getItem(TOURS_STORAGE_KEY);
-    if (!raw) {
-      window.localStorage.setItem(TOURS_STORAGE_KEY, JSON.stringify(initialTours));
-      return initialTours;
-    }
-    return JSON.parse(raw);
-  } catch {
-    return initialTours;
-  }
 };
 
 /**

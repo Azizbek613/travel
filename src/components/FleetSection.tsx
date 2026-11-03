@@ -13,7 +13,7 @@ interface FleetSectionProps {
 
 export const FleetSection = ({ lang, onOpenMyBookings }: FleetSectionProps) => {
   const t = useTranslation(lang);
-  const [carsList, setCarsList] = useState<Car[]>([]);
+  const [carsList, setCarsList] = useState<Car[]>(() => getCars());
   
   const [activeCarForDetails, setActiveCarForDetails] = useState<Car | null>(null);
   const [activeCarForBooking, setActiveCarForBooking] = useState<Car | null>(null);

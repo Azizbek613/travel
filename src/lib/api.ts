@@ -1,4 +1,4 @@
-import type { Booking, BusyRange } from '@/lib/store';
+import type { Booking, BusyRange, Car, Tour } from '@/lib/store';
 
 export class ApiError extends Error {
   status: number;
@@ -35,7 +35,7 @@ async function request<T>(path: string, options: RequestInit = {}, admin = false
   try {
     data = await res.json();
   } catch {
-    /* non-JSON response (e.g. the server is not running) */
+    /* non-JSON response */
   }
   if (!res.ok || data === null) {
     throw new ApiError(res.status, data?.error || 'server_error', data?.fields);
@@ -43,8 +43,63 @@ async function request<T>(path: string, options: RequestInit = {}, admin = false
   return data as T;
 }
 
-// ---------- public (customers) ----------
+// ---------- Cars API (Server-side Database) ----------
+export const apiFetchCars = async (): Promise<Car[]> => {
+  const data = await request<{ cars: Car[] }>('/api/cars');
+  return data.cars;
+};
 
+export const apiCreateCar = async (car: Car): Promise<Car> => {
+  const data = await request<{ ok: boolean; car: Car }>(
+    '/api/cars',
+    { method: 'POST', body: JSON.stringify(car) },
+    true
+  );
+  return data.car;
+};
+
+export const apiUpdateCar = async (car: Car): Promise<Car> => {
+  const data = await request<{ ok: boolean; car: Car }>(
+    '/api/cars',
+    { method: 'PUT', body: JSON.stringify(car) },
+    true
+  );
+  return data.car;
+};
+
+export const apiDeleteCar = async (id: string): Promise<void> => {
+  await request(`/api/cars?id=${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
+};
+
+// ---------- Tours API (Server-side Database) ----------
+export const apiFetchTours = async (): Promise<Tour[]> => {
+  const data = await request<{ tours: Tour[] }>('/api/tours');
+  return data.tours;
+};
+
+export const apiCreateTour = async (tour: Tour): Promise<Tour> => {
+  const data = await request<{ ok: boolean; tour: Tour }>(
+    '/api/tours',
+    { method: 'POST', body: JSON.stringify(tour) },
+    true
+  );
+  return data.tour;
+};
+
+export const apiUpdateTour = async (tour: Tour): Promise<Tour> => {
+  const data = await request<{ ok: boolean; tour: Tour }>(
+    '/api/tours',
+    { method: 'PUT', body: JSON.stringify(tour) },
+    true
+  );
+  return data.tour;
+};
+
+export const apiDeleteTour = async (id: string): Promise<void> => {
+  await request(`/api/tours?id=${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
+};
+
+// ---------- public bookings (customers) ----------
 export type NewBookingInput = Omit<
   Booking,
   'id' | 'createdAt' | 'status' | 'days' | 'dailyRate' | 'totalPrice'
@@ -56,35 +111,11 @@ export const fetchBusyRanges = async (carId: string): Promise<BusyRange[]> => {
 };
 
 export const submitBooking = async (input: NewBookingInput): Promise<Booking> => {
-  try {
-    const data = await request<{ booking: Booking }>('/api/bookings', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    return data.booking;
-  } catch (err) {
-    const bookingId = 'tc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const start = new Date(input.startDate);
-    const end = new Date(input.endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    const dailyRate = 50;
-    const totalPrice = days * dailyRate;
-    const fallbackBooking: Booking = {
-      ...input,
-      id: bookingId,
-      status: 'pending',
-      days,
-      dailyRate,
-      totalPrice,
-      createdAt: new Date().toISOString(),
-    };
-    try {
-      const existing = JSON.parse(localStorage.getItem('travel_caravan_admin_bookings') || '[]');
-      localStorage.setItem('travel_caravan_admin_bookings', JSON.stringify([fallbackBooking, ...existing]));
-    } catch {}
-    return fallbackBooking;
-  }
+  const data = await request<{ booking: Booking }>('/api/bookings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.booking;
 };
 
 export const lookupBooking = async (id: string, phone: string): Promise<Booking> => {
@@ -103,9 +134,6 @@ export const cancelMyBooking = async (id: string, phone: string): Promise<Bookin
   return data.booking;
 };
 
-// Bookings made on this device are remembered (id + phone only) so the customer
-// can see their status later without logging in. Other people's bookings are
-// never exposed: the server only returns a booking when id AND phone match.
 const MY_BOOKINGS_KEY = 'travel_caravan_my_bookings_v2';
 export interface MyBookingRef {
   id: string;
@@ -126,7 +154,7 @@ export const addMyBookingRef = (ref: MyBookingRef) => {
     const refs = getMyBookingRefs().filter((r) => r.id !== ref.id);
     localStorage.setItem(MY_BOOKINGS_KEY, JSON.stringify([ref, ...refs].slice(0, 30)));
   } catch {
-    /* storage unavailable (private mode) — the booking is still saved on the server */
+    /* storage unavailable */
   }
 };
 
@@ -139,7 +167,6 @@ export const removeMyBookingRef = (id: string) => {
 };
 
 // ---------- admin ----------
-
 export const adminLogin = async (username: string, password: string): Promise<string> => {
   const data = await request<{ token: string }>('/api/admin/login', {
     method: 'POST',
@@ -153,15 +180,15 @@ export const adminFetchBookings = async (): Promise<{ bookings: Booking[]; teleg
 
 export const adminSetBookingStatus = async (id: string, status: Booking['status']): Promise<Booking> => {
   const data = await request<{ booking: Booking }>(
-    `/api/admin/bookings/${encodeURIComponent(id)}`,
-    { method: 'PATCH', body: JSON.stringify({ status }) },
+    `/api/bookings?id=${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify({ id, status }) },
     true
   );
   return data.booking;
 };
 
 export const adminDeleteBooking = async (id: string): Promise<void> => {
-  await request(`/api/admin/bookings/${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
+  await request(`/api/bookings?id=${encodeURIComponent(id)}`, { method: 'DELETE' }, true);
 };
 
 export const adminTestTelegram = async (): Promise<{ ok: boolean; reason?: string }> => {
